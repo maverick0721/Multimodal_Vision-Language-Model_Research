@@ -1,0 +1,9 @@
+vision_dim: 768
+vision_depth: 12
+vision_heads: 12
+
+text_dim: 768
+text_depth: 12
+
+vocab_size: 32000
+compressed_tokens: 32

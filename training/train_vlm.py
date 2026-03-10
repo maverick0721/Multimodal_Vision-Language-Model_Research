@@ -1,0 +1,41 @@
+import torch
+
+from multimodal.vlm_model import VLM
+from experiments.logger import Logger
+
+model = VLM(vocab=32000).cuda()
+
+optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=3e-4
+)
+
+logger = Logger()
+
+for step in range(10000):
+
+    images = torch.randn(
+        8,3,224,224
+    ).cuda()
+
+    tokens = torch.randint(
+        0,32000,
+        (8,128)
+    ).cuda()
+
+    logits = model(images,tokens)
+
+    loss = torch.nn.functional.cross_entropy(
+        logits.view(-1,32000),
+        tokens.view(-1)
+    )
+
+    optimizer.zero_grad()
+
+    loss.backward()
+
+    optimizer.step()
+
+    logger.log(step,loss.item())
+
+    print(step,loss.item())

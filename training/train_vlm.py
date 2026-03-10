@@ -3,6 +3,9 @@ import torch
 from multimodal.vlm_model import VLM
 from experiments.logger import Logger
 
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
 model = VLM(vocab=32000).cuda()
 
 optimizer = torch.optim.AdamW(

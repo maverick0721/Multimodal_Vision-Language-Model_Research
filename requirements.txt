@@ -1,3 +1,6 @@
+torch
+torchvision
 tiktoken
 webdataset
 matplotlib
+Pillow

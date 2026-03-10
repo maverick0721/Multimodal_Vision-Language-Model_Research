@@ -1,9 +1,11 @@
+import torch
 import torch.nn as nn
+import torch.utils.checkpoint as checkpoint
 
+from .rmsnorm import RMSNorm
 from .gqa_attention import GQAAttention
 from .cross_attention import CrossAttention
 from .moe_ffn import MoEFFN
-from .rmsnorm import RMSNorm
 
 
 class DecoderLayer(nn.Module):
@@ -13,32 +15,33 @@ class DecoderLayer(nn.Module):
         super().__init__()
 
         self.norm1 = RMSNorm(dim)
-        self.attn = GQAAttention(dim)
-
         self.norm2 = RMSNorm(dim)
-        self.cross = CrossAttention(dim)
-
         self.norm3 = RMSNorm(dim)
 
-        self.ffn = MoEFFN(
-            dim,
-            hidden_dim=3072,
-            num_experts=4,
-            top_k=2
-        )
+        self.attn = GQAAttention(dim)
 
+        self.cross = CrossAttention(dim)
 
-    def forward(self, x, vision):
+        self.ffn = MoEFFN(dim)
+
+    def forward(self, x, vision_tokens):
 
         # self attention
-        x = x + self.attn(self.norm1(x))
+        x = x + checkpoint.checkpoint(
+            lambda y: self.attn(self.norm1(y)),
+            x
+        )
 
-        # cross attention (vision)
-        x = x + self.cross(self.norm2(x), vision)
+        # cross attention with vision tokens
+        x = x + checkpoint.checkpoint(
+            lambda y: self.cross(self.norm2(y), vision_tokens),
+            x
+        )
 
-        # mixture-of-experts FFN
-        ffn_out, moe_loss = self.ffn(self.norm3(x))
+        # mixture of experts feedforward
+        x = x + checkpoint.checkpoint(
+            lambda y: self.ffn(self.norm3(y)),
+            x
+        )
 
-        x = x + ffn_out
-
-        return x, moe_loss
+        return x

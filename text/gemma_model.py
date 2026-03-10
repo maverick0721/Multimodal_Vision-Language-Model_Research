@@ -19,12 +19,13 @@ class GemmaModel(nn.Module):
 
         self.head.weight = self.embed.weight
 
-    def forward(self,tokens):
+    def forward(self, tokens, vision):
 
         x = self.embed(tokens)
 
         for layer in self.layers:
-            x = layer(x)
+
+            x = layer(x, vision)
 
         x = self.norm(x)
 

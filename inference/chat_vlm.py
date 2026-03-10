@@ -1,91 +1,150 @@
 import torch
-import torchvision.transforms as T
 from PIL import Image
+import torchvision.transforms as T
 
 from multimodal.vlm_model import VLM
-from inference.sampling import top_p
+from inference.generate import generate
+
+# Retrieval
+from retrieval.load_knowledge import load_knowledge
+from retrieval.retriever import SimpleRetriever
+from retrieval.embedder import SimpleEmbedder
+
+# Tools + reasoning
+from agents.router import ToolRouter
+from agents.react_agent import ReActAgent
+
+# Memory
+from agents.memory import ConversationMemory
 
 
 class VLMChat:
 
-    def __init__(self, checkpoint=None, vocab=32000, device="cuda"):
+    def __init__(
+        self,
+        checkpoint=None,
+        vocab=32000,
+        device=None
+    ):
 
-        self.device = device
 
-        self.model = VLM(vocab=vocab).to(device)
+        # Device
+        self.device = device or (
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+
+
+        # Load VLM
+        self.model = VLM(vocab=vocab)
 
         if checkpoint is not None:
-            ckpt = torch.load(checkpoint, map_location=device)
-            self.model.load_state_dict(ckpt["model"])
 
+            state = torch.load(
+                checkpoint,
+                map_location=self.device
+            )
+
+            self.model.load_state_dict(state)
+
+        self.model.to(self.device)
         self.model.eval()
 
+    
+        # Retrieval system
+        texts = load_knowledge("knowledge/wiki.txt")
+
+        embedder = SimpleEmbedder()
+
+        self.retriever = SimpleRetriever(
+            texts,
+            embedder
+        )
+
+    
+        # Tools + reasoning
+        self.router = ToolRouter()
+        self.agent = ReActAgent(self.model)
+
+   
+        # Conversation memory
+        self.memory = ConversationMemory(max_turns=5)
+
+   
+        # Image transform
         self.transform = T.Compose([
-            T.Resize((224,224)),
+            T.Resize((224, 224)),
             T.ToTensor()
         ])
 
 
-    def preprocess_image(self, path):
+    # Load image
+    def load_image(self, image):
 
-        img = Image.open(path).convert("RGB")
+        if isinstance(image, str):
 
-        img = self.transform(img)
+            img = Image.open(image).convert("RGB")
 
-        return img.unsqueeze(0).to(self.device)
+            image = self.transform(img).unsqueeze(0)
 
+        return image.to(self.device)
 
-    def tokenize(self, text, max_len=128):
+   
+    # Build retrieval prompt
+    def build_prompt(self, question):
 
-        tokens = [ord(c) % 32000 for c in text]
+        docs = self.retriever.search(question, k=3)
 
-        tokens = tokens[:max_len]
+        context = "\n".join(docs)
 
-        return torch.tensor(tokens).unsqueeze(0).to(self.device)
+        history = self.memory.get_context()
 
+        prompt = f"""
+Conversation history:
+{history}
 
-    def detokenize(self, tokens):
+Retrieved knowledge:
+{context}
 
-        chars = [chr(int(t) % 256) for t in tokens]
+User question:
+{question}
 
-        return "".join(chars)
+Answer:
+"""
 
+        return prompt
 
-    @torch.no_grad()
-    def generate(self, image_path, prompt, max_tokens=64):
+   
+    # Chat interface
+    def chat(self, image, question):
 
-        image = self.preprocess_image(image_path)
+        image = self.load_image(image)
 
-        tokens = self.tokenize(prompt)
+        # -------- tool detection --------
 
-        for _ in range(max_tokens):
+        tool_result = self.router.run(question)
 
-            logits = self.model(image, tokens)
+        if tool_result is not None:
 
-            next_token = top_p(
-                logits[:, -1, :],
-                p=0.9,
-                temp=0.8
-            )
+            question = f"""
+Tool result: {tool_result}
 
-            tokens = torch.cat(
-                [tokens, next_token],
-                dim=1
-            )
+User question:
+{question}
+"""
 
-        return self.detokenize(tokens[0])
+        # -------- build prompt --------
 
+        prompt = self.build_prompt(question)
 
-if __name__ == "__main__":
+        # -------- reasoning agent --------
 
-    chat = VLMChat()
+        answer = self.agent.run(
+            image=image,
+            question=prompt
+        )
 
-    while True:
+        # -------- update memory --------
 
-        img = input("Image path: ")
+        self.memory.add(question, answer)
 
-        prompt = input("User: ")
-
-        answer = chat.generate(img, prompt)
-
-        print("Assistant:", answer)
+        return answer

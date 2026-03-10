@@ -1,13 +1,13 @@
 from inference.chat_vlm import VLMChat
 
-chat = VLMChat()
 
-while True:
+chat = VLMChat(
+    checkpoint="experiments/run_001/checkpoint_1000.pt"
+)
 
-    image = input("image: ")
+response = chat.chat(
+    image="data/images/dog.jpg",
+    question="What animal is this?"
+)
 
-    prompt = input("prompt: ")
-
-    out = chat.generate(image, prompt)
-
-    print(out)
+print(response)

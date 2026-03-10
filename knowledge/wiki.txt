@@ -1,0 +1,5 @@
+The Eiffel Tower is a landmark located in Paris, France.
+
+Dogs are domesticated mammals commonly kept as pets.
+
+Cars are vehicles used for transportation.

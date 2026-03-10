@@ -1,78 +1,232 @@
+import os
+import glob
+import json
 import torch
+import argparse
+
+from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
 
 from multimodal.vlm_model import VLM
+from utils.config import load_config
 from experiments.logger import Logger
-from text.lora import apply_lora
-import torch.distributed as dist
-from training.contrastive_loss import siglip_loss
 
-dist.init_process_group("nccl")
+
+# -----------------------------
+# CUDA stability
+# -----------------------------
+
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-torch.backends.cuda.enable_flash_sdp(True)
-torch.backends.cuda.enable_mem_efficient_sdp(True)
-torch.backends.cuda.enable_math_sdp(False)
 
 
-model = VLM(vocab=32000).cuda()
+# -----------------------------
+# Checkpoint loader
+# -----------------------------
 
-# apply LoRA to decoder
-apply_lora(model.text)
+def load_latest_checkpoint(model, optimizer, output_dir):
 
-# freeze base weights
-for name, p in model.named_parameters():
+    ckpts = glob.glob(os.path.join(output_dir, "checkpoint_*.pt"))
 
-    if "lora_" not in name:
+    if len(ckpts) == 0:
+        return 0
 
-        p.requires_grad = False
+    ckpts.sort()
 
+    latest = ckpts[-1]
+
+    print("Resuming from:", latest)
+
+    data = torch.load(latest)
+
+    model.load_state_dict(data["model"])
+    optimizer.load_state_dict(data["optimizer"])
+
+    return data["step"]
+
+
+# -----------------------------
+# Arguments
+# -----------------------------
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--model_config")
+parser.add_argument("--train_config")
+parser.add_argument("--output_dir")
+
+args = parser.parse_args()
+
+
+# -----------------------------
+# Load configs
+# -----------------------------
+
+model_cfg = load_config(args.model_config)
+train_cfg = load_config(args.train_config)
+
+
+# -----------------------------
+# Training parameters
+# -----------------------------
+
+batch_size = train_cfg["batch_size"]
+epochs = train_cfg["epochs"]
+
+accum_steps = train_cfg.get("gradient_accumulation_steps", 1)
+
+
+# -----------------------------
+# Device
+# -----------------------------
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+# -----------------------------
+# Model
+# -----------------------------
+
+model = VLM(
+    vision_dim=model_cfg["vision_dim"],
+    text_dim=model_cfg["text_dim"],
+    num_layers=model_cfg["num_layers"],
+    vocab_size=model_cfg["vocab_size"]
+)
+
+model = model.to(device)
+
+
+# -----------------------------
+# Optimizer
+# -----------------------------
 
 optimizer = torch.optim.AdamW(
-    filter(lambda p: p.requires_grad, model.parameters()),
+    model.parameters(),
     lr=1e-4
 )
 
-logger = Logger()
+scaler = GradScaler()
 
 
-for step in range(10000):
+# -----------------------------
+# Logger
+# -----------------------------
 
-    images = torch.randn(
-        8,3,224,224
-    ).to(device)
+os.makedirs(args.output_dir, exist_ok=True)
 
-    tokens = torch.randint(
-        0,32000,
-        (8,128)
-    ).to(device)
+logger = Logger(args.output_dir)
 
-    logits, img_emb, txt_emb, moe_loss = model(images, tokens)
 
-    # ----- caption loss -----
-    shift_logits = logits[:, :-1, :].contiguous()
-    shift_labels = tokens[:, 1:].contiguous()
+# -----------------------------
+# Dataset placeholder
+# -----------------------------
 
-    caption_loss = torch.nn.functional.cross_entropy(
-        shift_logits.view(-1, shift_logits.size(-1)),
-        shift_labels.view(-1)
-    )
+dataset = []
 
-    # ----- contrastive alignment -----
-    contrast_loss = siglip_loss(img_emb, txt_emb)
+loader = DataLoader(
+    dataset,
+    batch_size=batch_size
+)
 
-    # ----- final loss -----
-    loss = caption_loss + 0.1 * contrast_loss + 0.01 * moe_loss
 
-    optimizer.zero_grad()
+# -----------------------------
+# Resume checkpoint
+# -----------------------------
 
-    loss.backward()
+start_step = load_latest_checkpoint(
+    model,
+    optimizer,
+    args.output_dir
+)
 
-    optimizer.step()
 
-    logger.log(step, loss.item())
+# -----------------------------
+# Training loop
+# -----------------------------
 
-    print(
-        f"step {step} | total {loss.item():.4f} | "
-        f"caption {caption_loss.item():.4f} | "
-        f"contrast {contrast_loss.item():.4f}"
-    )
+step = start_step
+
+optimizer.zero_grad()
+
+for epoch in range(epochs):
+
+    for batch in loader:
+
+        images = batch["image"].to(device)
+        tokens = batch["tokens"].to(device)
+
+        # Mixed precision forward
+        with autocast():
+
+            logits = model(images, tokens)
+
+            loss = logits.mean()
+
+        # Normalize loss for accumulation
+        loss = loss / accum_steps
+
+        scaler.scale(loss).backward()
+
+        # Update weights after accumulation
+        if step % accum_steps == 0:
+
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(),
+                1.0
+            )
+
+            scaler.step(optimizer)
+            scaler.update()
+
+            optimizer.zero_grad()
+
+        logger.log(step, loss.item())
+
+        # Logging
+        if step % 10 == 0:
+
+            vram = 0
+
+            if torch.cuda.is_available():
+                vram = torch.cuda.memory_allocated() / 1e9
+
+            print(
+                f"step {step} | loss {loss.item():.4f} | "
+                f"vram {vram:.2f} GB"
+            )
+
+        # Save checkpoint
+        if step % 1000 == 0:
+
+            torch.save(
+                {
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "step": step
+                },
+                os.path.join(
+                    args.output_dir,
+                    f"checkpoint_{step}.pt"
+                )
+            )
+
+        step += 1
+
+
+# -----------------------------
+# Save metrics
+# -----------------------------
+
+metrics = {
+    "final_loss": float(loss.item())
+}
+
+with open(
+    os.path.join(args.output_dir, "metrics.json"),
+    "w"
+) as f:
+
+    json.dump(metrics, f)

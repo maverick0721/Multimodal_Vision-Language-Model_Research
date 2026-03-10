@@ -1,21 +1,43 @@
 import webdataset as wds
-from torchvision import transforms
+import torchvision.transforms as T
+from PIL import Image
 
-transform = transforms.Compose([
-    transforms.Resize(224),
-    transforms.CenterCrop(224),
-    transforms.ToTensor()
+
+transform = T.Compose([
+    T.Resize((224,224)),
+    T.ToTensor()
 ])
 
-def create_loader(urls,batch_size):
+
+def preprocess(sample):
+
+    image = sample["jpg"]
+    text = sample["txt"]
+
+    image = transform(image)
+
+    tokens = [ord(c) % 32000 for c in text]
+
+    return image, tokens
+
+
+def create_loader(
+    shards,
+    batch_size=8,
+    num_workers=4
+):
 
     dataset = (
-        wds.WebDataset(urls)
-        .shuffle(1000)
+        wds.WebDataset(shards)
         .decode("pil")
         .to_tuple("jpg","txt")
-        .map_tuple(transform, lambda x:x)
-        .batched(batch_size)
+        .map_tuple(transform, lambda x: x)
     )
 
-    return dataset
+    loader = wds.WebLoader(
+        dataset,
+        batch_size=batch_size,
+        num_workers=num_workers
+    )
+
+    return loader

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class Attention(nn.Module):
+class VisionAttention(nn.Module):
 
     def __init__(self, dim, heads=8):
 

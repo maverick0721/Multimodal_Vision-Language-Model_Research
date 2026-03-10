@@ -1,20 +1,23 @@
-import json
 import matplotlib.pyplot as plt
 
-with open("logs.json") as f:
+steps = []
+losses = []
 
-    logs = json.load(f)
+with open("experiments/run_001/logs.txt") as f:
 
-steps = [l["step"] for l in logs]
+    for line in f:
 
-loss = [l["loss"] for l in logs]
+        step, loss = line.split(",")
 
-plt.plot(steps,loss)
+        steps.append(int(step))
+        losses.append(float(loss))
 
-plt.xlabel("step")
-plt.ylabel("loss")
 
-plt.savefig(
-    "training_curve.png",
-    dpi=300
-)
+plt.plot(steps, losses)
+
+plt.xlabel("Step")
+plt.ylabel("Loss")
+
+plt.title("Training Loss")
+
+plt.show()

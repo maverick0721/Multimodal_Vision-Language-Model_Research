@@ -1,9 +1,7 @@
 vision_dim: 768
-vision_depth: 12
-vision_heads: 12
-
 text_dim: 768
-text_depth: 12
-
+num_layers: 12
+num_heads: 8
+num_experts: 4
 vocab_size: 32000
-compressed_tokens: 32
+latent_tokens: 64

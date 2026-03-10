@@ -1,0 +1,28 @@
+[
+    {
+        "image": "images/dog.jpg",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "What animal is this?"
+            },
+            {
+                "role": "assistant",
+                "content": "This is a dog."
+            }
+        ]
+    },
+    {
+        "image": "images/car.jpg",
+        "conversations": [
+            {
+                "role": "user",
+                "content": "What is shown in the picture?"
+            },
+            {
+                "role": "assistant",
+                "content": "The image shows a car."
+            }
+        ]
+    }
+]

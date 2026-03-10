@@ -3,33 +3,36 @@ import torch
 
 class PagedKVCache:
 
-    def __init__(self, layers, heads, head_dim, page_size=16, device="cuda"):
+    def __init__(self, layers, heads, head_dim, page_size=16, max_pages=1024):
 
-        self.layers = layers
-        self.heads = heads
-        self.head_dim = head_dim
         self.page_size = page_size
-        self.device = device
 
-        self.k_pages = [[] for _ in range(layers)]
-        self.v_pages = [[] for _ in range(layers)]
+        self.k = torch.zeros(
+            layers, max_pages, heads, page_size, head_dim,
+            device="cuda"
+        )
 
-    def append(self, layer, k, v):
+        self.v = torch.zeros(
+            layers, max_pages, heads, page_size, head_dim,
+            device="cuda"
+        )
 
-        self.k_pages[layer].append(k.detach())
-        self.v_pages[layer].append(v.detach())
+        self.next_page = 0
 
-    def get(self, layer):
+    def allocate_page(self):
 
-        if len(self.k_pages[layer]) == 0:
-            return None, None
+        page = self.next_page
+        self.next_page += 1
+        return page
 
-        k = torch.cat(self.k_pages[layer], dim=2)
-        v = torch.cat(self.v_pages[layer], dim=2)
+    def write(self, layer, page, position, k, v):
 
-        return k, v
+        self.k[layer, page, :, position] = k
+        self.v[layer, page, :, position] = v
 
-    def reset(self):
+    def read(self, layer, pages):
 
-        self.k_pages = [[] for _ in range(self.layers)]
-        self.v_pages = [[] for _ in range(self.layers)]
+        keys = self.k[layer, pages].reshape(-1, *self.k.shape[2:])
+        values = self.v[layer, pages].reshape(-1, *self.v.shape[2:])
+
+        return keys, values

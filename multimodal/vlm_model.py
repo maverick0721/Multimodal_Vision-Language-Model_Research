@@ -3,10 +3,12 @@ import torch.nn as nn
 
 from vision.siglip_encoder import SigLipEncoder
 from vision.token_compressor import TokenCompressor
+from vision.perceiver_resampler import PerceiverResampler
 from text.gemma_model import GemmaModel
 from multimodal.projector import ImageProjector
 from multimodal.projection_heads import ProjectionHead
 
+self.resampler = PerceiverResampler()
 
 class VLM(nn.Module):
 
@@ -26,36 +28,20 @@ class VLM(nn.Module):
         self.image_proj = ProjectionHead(dim)
         self.text_proj = ProjectionHead(dim)
 
-    def forward(self, image, tokens, kv_cache=None):
+    def forward(self, image, tokens):
 
-        # ----- vision encoder -----
         vision_tokens = self.vision(image)
-        vision_tokens = self.compress(vision_tokens)
+
+        vision_tokens = self.resampler(vision_tokens)
+
         vision_tokens = self.project(vision_tokens)
 
-        # ----- text embeddings -----
-        text_emb = self.text.embed(tokens)
+        logits = self.text(tokens, vision_tokens)
 
-        x = text_emb
+        img_emb = vision_tokens.mean(dim=1)
 
-        total_moe_loss = 0
+        txt_emb = logits.mean(dim=1)
 
-        # ----- decoder layers -----
-        for layer in self.text.layers:
+        moe_loss = torch.tensor(0.0, device=image.device)
 
-            x, moe_loss = layer(x, vision_tokens)
-
-            total_moe_loss += moe_loss
-
-        x = self.text.norm(x)
-
-        logits = self.text.head(x)
-
-        # ----- embeddings for contrastive loss -----
-        image_embed = vision_tokens.mean(dim=1)
-        text_embed = text_emb.mean(dim=1)
-
-        image_embed = self.image_proj(image_embed)
-        text_embed = self.text_proj(text_embed)
-
-        return logits, image_embed, text_embed, total_moe_loss
+        return logits, img_emb, txt_emb, moe_loss

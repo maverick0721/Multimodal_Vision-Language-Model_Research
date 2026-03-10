@@ -1,11 +1,13 @@
-import torch.distributed as dist
+import torch
 
-def setup():
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
-    dist.init_process_group(
-        backend="nccl"
+
+def wrap_model(model):
+
+    model = FSDP(
+        model,
+        device_id=torch.cuda.current_device()
     )
 
-def cleanup():
-
-    dist.destroy_process_group()
+    return model

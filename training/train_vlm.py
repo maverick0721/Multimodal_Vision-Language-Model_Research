@@ -26,11 +26,14 @@ for step in range(10000):
         (8,128)
     ).cuda()
 
-    logits = model(images,tokens)
+    logits = model(images, tokens)
+
+    shift_logits = logits[:, :-1, :].contiguous()
+    shift_labels = tokens[:, 1:].contiguous()
 
     loss = torch.nn.functional.cross_entropy(
-        logits.view(-1,32000),
-        tokens.view(-1)
+        shift_logits.view(-1, shift_logits.size(-1)),
+        shift_labels.view(-1)
     )
 
     optimizer.zero_grad()

@@ -21,21 +21,21 @@ class VLM(nn.Module):
 
         self.text = GemmaModel(vocab, dim)
 
+
     def forward(self, image, tokens):
 
-        # ---- Vision branch ----
         vision_tokens = self.vision(image)
+
         vision_tokens = self.compress(vision_tokens)
+
         vision_tokens = self.project(vision_tokens)
 
-        # ---- Text embeddings ----
         text_emb = self.text.embed(tokens)
 
-        # Decoder input starts with text tokens
         x = text_emb
 
-        # ---- Transformer decoder with cross-attention ----
         for layer in self.text.layers:
+
             x = layer(x, vision_tokens)
 
         x = self.text.norm(x)

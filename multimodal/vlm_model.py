@@ -23,30 +23,23 @@ class VLM(nn.Module):
 
     def forward(self, image, tokens):
 
-        # Vision encoder
+        # ---- Vision branch ----
         vision_tokens = self.vision(image)
-
-        # Compress vision tokens
         vision_tokens = self.compress(vision_tokens)
-
-        # Project into text embedding space
         vision_tokens = self.project(vision_tokens)
 
-        # Text embeddings
+        # ---- Text embeddings ----
         text_emb = self.text.embed(tokens)
 
-        # Concatenate vision + text tokens
-        x = torch.cat([vision_tokens, text_emb], dim=1)
+        # Decoder input starts with text tokens
+        x = text_emb
 
-        # Pass through decoder layers
+        # ---- Transformer decoder with cross-attention ----
         for layer in self.text.layers:
-            x = layer(x)
+            x = layer(x, vision_tokens)
 
         x = self.text.norm(x)
 
         logits = self.text.head(x)
 
-        # Return only text token predictions
-        vision_len = vision_tokens.shape[1]
-
-        return logits[:, vision_len:, :]
+        return logits

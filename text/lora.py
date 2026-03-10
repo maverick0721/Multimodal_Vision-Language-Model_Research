@@ -4,10 +4,6 @@ import torch.nn as nn
 
 
 class LoRALinear(nn.Module):
-    """
-    Wraps an existing nn.Linear with LoRA adapters.
-    During fine-tuning, freeze the base weight and train only A,B.
-    """
 
     def __init__(self, linear, r=8, alpha=16, dropout=0.0):
 
@@ -31,25 +27,34 @@ class LoRALinear(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
-        # Freeze base weights
+        # freeze base weight
         self.linear.weight.requires_grad = False
         if self.linear.bias is not None:
             self.linear.bias.requires_grad = False
+
+    # expose weight and bias so PyTorch modules still work
+    @property
+    def weight(self):
+        return self.linear.weight
+
+    @property
+    def bias(self):
+        return self.linear.bias
 
     def forward(self, x):
 
         base = self.linear(x)
 
-        lora = self.dropout(x) @ self.lora_A.t()
-        lora = lora @ self.lora_B.t()
+        A = self.lora_A.to(x.device)
+        B = self.lora_B.to(x.device)
+
+        lora = self.dropout(x) @ A.t()
+        lora = lora @ B.t()
 
         return base + lora * self.scaling
 
 
 def apply_lora(module, target=("q", "k", "v", "out"), r=8, alpha=16):
-    """
-    Recursively replaces Linear layers in attention modules with LoRA versions.
-    """
 
     for name, child in module.named_children():
 
@@ -59,4 +64,4 @@ def apply_lora(module, target=("q", "k", "v", "out"), r=8, alpha=16):
 
         else:
 
-            apply_lora(child, target, r=r, alpha=alpha)
+            apply_lora(child, target, r, alpha)

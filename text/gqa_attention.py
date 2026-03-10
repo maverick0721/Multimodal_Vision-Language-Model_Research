@@ -18,7 +18,7 @@ class GQAAttention(nn.Module):
 
         self.out = nn.Linear(dim, dim)
 
-    def forward(self, x):
+    def forward(self, x, kv_cache=None, layer_id=None):
 
         B, T, D = x.shape
 
@@ -30,10 +30,18 @@ class GQAAttention(nn.Module):
         k = k.view(B, T, self.heads, self.head_dim).transpose(1,2)
         v = v.view(B, T, self.heads, self.head_dim).transpose(1,2)
 
-        attn = torch.matmul(q, k.transpose(-2,-1)) / (self.head_dim ** 0.5)
-        attn = torch.softmax(attn, dim=-1)
+        if kv_cache is not None:
 
-        out = torch.matmul(attn, v)
+            prev_k, prev_v = kv_cache.get(layer_id)
+
+            if prev_k is not None:
+
+                k = torch.cat([prev_k, k], dim=2)
+                v = torch.cat([prev_v, v], dim=2)
+
+            kv_cache.append(layer_id, k, v)
+
+        out = torch.nn.functional.scaled_dot_product_attention(q, k, v)
 
         out = out.transpose(1,2).reshape(B, T, D)
 

@@ -1,34 +1,35 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-class VisionAttention(nn.Module):
 
-    def __init__(self,dim,heads):
+class Attention(nn.Module):
+
+    def __init__(self, dim, heads=8):
 
         super().__init__()
 
         self.heads = heads
-        self.scale = (dim//heads)**-0.5
+        self.head_dim = dim // heads
 
-        self.qkv = nn.Linear(dim,dim*3)
-        self.proj = nn.Linear(dim,dim)
+        self.qkv = nn.Linear(dim, dim * 3)
 
-    def forward(self,x):
+        self.out = nn.Linear(dim, dim)
 
-        B,N,D = x.shape
+    def forward(self, x):
 
-        qkv = self.qkv(x).chunk(3,-1)
+        B, T, D = x.shape
 
-        q,k,v = [
-            t.view(B,N,self.heads,D//self.heads).transpose(1,2)
-            for t in qkv
-        ]
+        qkv = self.qkv(x).chunk(3, dim=-1)
 
-        attn = (q @ k.transpose(-2,-1))*self.scale
-        attn = attn.softmax(-1)
+        q, k, v = qkv
 
-        out = attn @ v
+        q = q.view(B, T, self.heads, self.head_dim).transpose(1,2)
+        k = k.view(B, T, self.heads, self.head_dim).transpose(1,2)
+        v = v.view(B, T, self.heads, self.head_dim).transpose(1,2)
 
-        out = out.transpose(1,2).reshape(B,N,D)
+        out = F.scaled_dot_product_attention(q, k, v)
 
-        return self.proj(out)
+        out = out.transpose(1,2).reshape(B, T, D)
+
+        return self.out(out)

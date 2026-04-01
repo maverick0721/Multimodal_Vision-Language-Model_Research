@@ -1,14 +1,89 @@
 # Multimodal Vision-Language Model
 
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch&logoColor=white)
+![CUDA](https://img.shields.io/badge/CUDA-Enabled-76B900?logo=nvidia&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
+![Architecture](https://img.shields.io/badge/Architecture-SigLIP%20%2B%20Gemma-2C3E50)
+![Training](https://img.shields.io/badge/Training-FSDP%20Supported-16A085)
+![Inference](https://img.shields.io/badge/Inference-Paged%20KV%20%2B%20Speculative-8E44AD)
+![RAG](https://img.shields.io/badge/RAG-Built--in-F39C12)
+![Agent](https://img.shields.io/badge/Agent-ReAct-1ABC9C)
+![License](https://img.shields.io/badge/License-Research%20%26%20Educational-lightgrey)
+
 A from-scratch implementation of a Vision-Language Model (VLM) that fuses a SigLIP-based vision encoder with a Gemma-style causal language model through cross-attention and Perceiver Resampling. Trained end-to-end for visual instruction following with support for contrastive alignment, Mixture-of-Experts routing, speculative decoding, paged KV-cache inference, RAG-augmented chat, and distributed FSDP training.
 
 Built entirely in PyTorch — no pretrained VLM weights, no third-party model hubs. Everything from patch embeddings to top-p sampling is written from the ground up.
+
+## Problem
+
+- Most multimodal repos are hard to evaluate quickly for hiring or research: architecture is spread out, the training-to-inference story is unclear, and reproducibility is often weak.
+- Recruiters and collaborators need a concrete, inspectable implementation that proves systems depth, modeling knowledge, and end-to-end execution.
+
+## Solution
+
+- A from-scratch, modular VLM stack that is readable, reproducible, and runnable across training, inference, evaluation, RAG, and agent tooling.
+- Clear code boundaries across vision, text, multimodal fusion, distributed training, and benchmarking.
+
+| Component | What it does | Core files |
+|----------|---------------|------------|
+| Vision Encoder | Extracts image tokens using SigLIP-style ViT blocks, then compresses with Perceiver + token compressor | `vision/siglip_encoder.py`, `vision/perceiver_resampler.py`, `vision/token_compressor.py` |
+| Language Model | Gemma-style decoder with GQA, cross-attention to image tokens, and MoE FFN | `text/gemma_model.py`, `text/decoder_layer.py`, `text/moe_ffn.py` |
+| Multimodal Fusion | Projects and injects vision tokens into text decoding | `multimodal/vlm_model.py`, `multimodal/projector.py` |
+| Training Stack | Multi-loss optimization (LM + contrastive + MoE), checkpointing, logging | `training/train_vlm.py`, `training/contrastive_loss.py`, `experiments/logger.py` |
+| Inference Stack | Top-p generation, paged KV-cache, speculative decoding, interactive chat | `inference/generate.py`, `inference/paged_kv_cache.py`, `inference/speculative_decoder.py` |
+| Evaluation + RAG | BLEU/VQA/R@K benchmarks and retrieval-augmented prompting | `evaluation/evaluate.py`, `retrieval/retriever.py`, `inference/chat_vlm.py` |
+
+## Architecture
+
+The core design is a SigLIP-style vision encoder feeding compressed visual tokens into a Gemma-style decoder via cross-attention, with optional contrastive alignment and MoE routing. A full architecture deep dive and layer-level diagrams are included below.
+
+## Demo Command
+
+```mermaid
+flowchart LR
+    A[Clone Repo] --> B[Install Dependencies]
+    B --> C[Train or Load Checkpoint]
+    C --> D[Run Inference or Chat]
+    D --> E[Evaluate Metrics]
+
+    style A fill:#4a9eff,stroke:#2980b9,color:#fff
+    style B fill:#1abc9c,stroke:#16a085,color:#fff
+    style C fill:#e67e22,stroke:#ca6f1e,color:#fff
+    style D fill:#8e44ad,stroke:#6c3483,color:#fff
+    style E fill:#27ae60,stroke:#1e8449,color:#fff
+```
+
+```bash
+git clone https://github.com/<your-username>/Multimodal_Vision-Language-Model_Research.git
+cd Multimodal_Vision-Language-Model_Research
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Fast demo path
+python -m demo
+
+# Or run complete scripted pipeline
+./scripts/start_project.sh
+```
+
+## Results
+
+- Training loss drops from `11.2847` to near-zero in the provided run logs.
+- End-to-end pipeline includes captioning, VQA, and retrieval benchmarks with report generation.
+- Working outputs are reproducible via scripts, Docker services, and saved checkpoints in `outputs/`.
+
+## Why this matters
+
+- Demonstrates full-stack ML engineering ability: model design, systems optimization, infra, and evaluation.
+- Makes technical due diligence easy for reviewers by pairing implementation depth with runnable workflows.
+- Serves as a practical base for research extensions (larger datasets, better retrieval, stronger experts, and scaling experiments).
 
 ---
 
 ## Table of Contents
 
-- [Architecture](#architecture)
+- [Architecture Deep Dive](#architecture-deep-dive)
 - [System Design](#system-design)
 - [Project Structure](#project-structure)
 - [Setup](#setup)
@@ -21,13 +96,13 @@ Built entirely in PyTorch — no pretrained VLM weights, no third-party model hu
 - [Distributed Training](#distributed-training)
 - [Configuration](#configuration)
 - [Pipeline](#pipeline)
-- [Results](#results)
-- [Key Design Decisions](#key-design-decisions)
+- [Results Deep Dive](#results-deep-dive)
+- [Why this matters (technical rationale)](#why-this-matters-technical-rationale)
 - [Acknowledgments](#acknowledgments)
 
 ---
 
-## Architecture
+## Architecture Deep Dive
 
 ### End-to-End Model Architecture
 
@@ -988,7 +1063,7 @@ flowchart LR
 
 ---
 
-## Results
+## Results Deep Dive
 
 ### Training Convergence
 
@@ -1003,11 +1078,19 @@ step 300 | loss  0.0000
 ```
 
 ```mermaid
-xychart-beta
-    title "Training Loss Convergence"
-    x-axis "Training Step" [0, 50, 100, 150, 200, 250, 300]
-    y-axis "Loss" 0 --> 12
-    line [11.28, 2.14, 0.35, 0.08, 0.001, 0.0, 0.0]
+flowchart LR
+    S0["Step 0\nLoss 11.28"] --> S50["Step 50\nLoss 2.14"]
+    S50 --> S100["Step 100\nLoss 0.35"]
+    S100 --> S150["Step 150\nLoss 0.08"]
+    S150 --> S200["Step 200\nLoss 0.001"]
+    S200 --> S300["Step 300\nLoss 0.000"]
+
+    style S0 fill:#e74c3c,stroke:#c0392b,color:#fff,stroke-width:2px
+    style S50 fill:#f39c12,stroke:#ca6f1e,color:#fff,stroke-width:2px
+    style S100 fill:#f1c40f,stroke:#b7950b,color:#1f2937,stroke-width:2px
+    style S150 fill:#85c1e9,stroke:#3498db,color:#1f2937,stroke-width:2px
+    style S200 fill:#58d68d,stroke:#27ae60,color:#1f2937,stroke-width:2px
+    style S300 fill:#27ae60,stroke:#1e8449,color:#fff,stroke-width:2px
 ```
 
 ### Sample Outputs
@@ -1019,7 +1102,7 @@ xychart-beta
 
 ---
 
-## Key Design Decisions
+## Why this matters (technical rationale)
 
 - **SigLIP over CLIP** — SigLIP's sigmoid-based contrastive loss scales better than CLIP's softmax formulation for large batch sizes and avoids the need for a global normalization term.
 - **Perceiver Resampler + Token Compressor** — Two-stage compression reduces 196 vision patches down to 32 tokens, cutting cross-attention cost by 6× without significant information loss.

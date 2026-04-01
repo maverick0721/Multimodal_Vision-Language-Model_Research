@@ -934,6 +934,12 @@ Quick dry-run mode (caps training steps and skips interactive stages):
 FAST_DRY_RUN=1 TRAIN_MAX_STEPS=20 ./scripts/run_all.sh
 ```
 
+Wrapper validation mode (no real execution, useful for CI/local script checks):
+
+```bash
+SKIP_VENV_CHECK=1 SKIP_GPU_CHECK=1 SKIP_DATASET_CHECK=1 DRY_RUN_COMMANDS=1 FAST_DRY_RUN=1 ./scripts/run_all.sh
+```
+
 To enable interactive inference/chat stages explicitly:
 
 ```bash

@@ -2,6 +2,21 @@
 
 set -e
 
+if [ -f ".env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+fi
+
+if [ -n "${HF_TOKEN:-}" ] && [ -z "${HUGGINGFACE_HUB_TOKEN:-}" ]; then
+    export HUGGINGFACE_HUB_TOKEN="$HF_TOKEN"
+fi
+
+if [ -n "${HUGGINGFACE_HUB_TOKEN:-}" ] && [ -z "${HF_TOKEN:-}" ]; then
+    export HF_TOKEN="$HUGGINGFACE_HUB_TOKEN"
+fi
+
 run_cmd() {
     if [ "${DRY_RUN_COMMANDS:-0}" = "1" ]; then
         echo "[DRY-RUN] $*"

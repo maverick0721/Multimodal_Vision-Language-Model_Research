@@ -922,6 +922,21 @@ betas: [0.9, 0.95]
 
 ## Pipeline
 
+Run everything with one command (recommended for demos):
+
+```bash
+./scripts/start_project.sh
+```
+
+This command runs a fast end-to-end pipeline check, prints a walkthrough, and starts the web demo URL.
+
+Other launcher modes:
+
+```bash
+./scripts/start_project.sh full
+./scripts/start_project.sh explain
+```
+
 The full pipeline runs training through evaluation and inference in a single command:
 
 ```bash

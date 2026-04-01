@@ -2,16 +2,47 @@ import glob
 import os
 import re
 import tempfile
+from pathlib import Path
 from typing import Optional
 
 import gradio as gr
 import torch
 from transformers import BlipForConditionalGeneration, BlipProcessor
+from transformers.utils import logging as hf_logging
 
 from inference.generate import Generator
 
 
 WEB_DEMO_BACKEND = os.getenv("WEB_DEMO_BACKEND", "blip").strip().lower()
+WEB_DEMO_PORT = int(os.getenv("WEB_DEMO_PORT", "7860"))
+
+
+def load_local_env() -> None:
+    env_path = Path(".env")
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+    hf_token = os.getenv("HF_TOKEN")
+    hub_token = os.getenv("HUGGINGFACE_HUB_TOKEN")
+    if hf_token and not hub_token:
+        os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
+    elif hub_token and not hf_token:
+        os.environ["HF_TOKEN"] = hub_token
+
+
+load_local_env()
+
+# Keep startup logs clean for demo mode by hiding non-critical HF warnings.
+hf_logging.set_verbosity_error()
 
 
 def find_latest_valid_checkpoint() -> str:
@@ -86,7 +117,7 @@ def fallback_caption(image, prompt):
 
     if _BLIP_PROCESSOR is None or _BLIP_MODEL is None:
         model_name = "Salesforce/blip-image-captioning-base"
-        _BLIP_PROCESSOR = BlipProcessor.from_pretrained(model_name)
+        _BLIP_PROCESSOR = BlipProcessor.from_pretrained(model_name, use_fast=False)
         _BLIP_MODEL = BlipForConditionalGeneration.from_pretrained(model_name)
         # Keep fallback on CPU to avoid OOM when a custom VLM also occupies GPU memory.
         device = "cpu"
@@ -176,4 +207,4 @@ with gr.Blocks(title="Multimodal VLM Demo") as demo:
 
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", server_port=7860, share=False)
+    demo.launch(server_name="127.0.0.1", server_port=WEB_DEMO_PORT, share=False)

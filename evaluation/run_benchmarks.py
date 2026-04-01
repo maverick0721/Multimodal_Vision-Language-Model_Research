@@ -29,10 +29,20 @@ torch.set_grad_enabled(False)
 ckpts = glob.glob("outputs/checkpoint_*.pt") + glob.glob("experiments/*/checkpoint_*.pt")
 
 if ckpts:
-    latest = sorted(ckpts)[-1]
-    ckpt = torch.load(latest, map_location=device)
-    model.load_state_dict(ckpt["model"])
-    print("Loaded checkpoint:", latest)
+    loaded = False
+
+    for latest in sorted(ckpts, reverse=True):
+        try:
+            ckpt = torch.load(latest, map_location=device)
+            model.load_state_dict(ckpt["model"])
+            print("Loaded checkpoint:", latest)
+            loaded = True
+            break
+        except Exception as e:
+            print(f"Skipping unreadable checkpoint {latest}: {e}")
+
+    if not loaded:
+        print("No valid checkpoint found, using random weights.")
 else:
     print("No checkpoint found, using random weights.")
 

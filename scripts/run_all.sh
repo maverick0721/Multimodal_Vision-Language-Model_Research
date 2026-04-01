@@ -49,6 +49,17 @@ fi
 echo "Dataset OK"
 
 
+FAST_DRY_RUN="${FAST_DRY_RUN:-0}"
+TRAIN_MAX_STEPS="${TRAIN_MAX_STEPS:-20}"
+TRAIN_STEPS_ARG="-1"
+
+if [ "$FAST_DRY_RUN" = "1" ]; then
+    TRAIN_STEPS_ARG="$TRAIN_MAX_STEPS"
+    RUN_INTERACTIVE=0
+    echo "FAST_DRY_RUN enabled: training capped at ${TRAIN_STEPS_ARG} steps"
+fi
+
+
 echo ""
 echo "STEP 4: Training model"
 echo "-------------------------------------------------"
@@ -58,7 +69,8 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)
 python -m training.train_vlm \
     --model_config configs/model.yaml \
     --train_config configs/training.yaml \
-    --output_dir outputs
+    --output_dir outputs \
+    --max_steps "$TRAIN_STEPS_ARG"
 
 
 echo ""

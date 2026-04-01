@@ -34,16 +34,24 @@ def load_latest_checkpoint(model, optimizer, output_dir):
         return 0
 
     ckpts.sort()
-    latest = ckpts[-1]
 
-    print("Resuming from:", latest)
+    for latest in reversed(ckpts):
 
-    data = torch.load(latest, map_location="cpu")
+        try:
+            print("Resuming from:", latest)
 
-    model.load_state_dict(data["model"])
-    optimizer.load_state_dict(data["optimizer"])
+            data = torch.load(latest, map_location="cpu")
 
-    return data["step"]
+            model.load_state_dict(data["model"])
+            optimizer.load_state_dict(data["optimizer"])
+
+            return data["step"]
+
+        except Exception as e:
+            print(f"Skipping unreadable checkpoint {latest}: {e}")
+
+    print("No valid checkpoint found, starting from scratch.")
+    return 0
 
 
 # -----------------------------
@@ -56,6 +64,7 @@ parser.add_argument("--model_config", type=str, default="configs/model.yaml")
 parser.add_argument("--train_config", type=str, default="configs/training.yaml")
 parser.add_argument("--optim_config", type=str, default="configs/optimizer.yaml")
 parser.add_argument("--output_dir", type=str, default="outputs")
+parser.add_argument("--max_steps", type=int, default=-1)
 
 args = parser.parse_args()
 
@@ -150,7 +159,9 @@ start_step = load_latest_checkpoint(
 )
 
 step = start_step
+max_steps = int(args.max_steps)
 last_loss = None
+stop_training = False
 
 optimizer.zero_grad()
 
@@ -162,6 +173,10 @@ optimizer.zero_grad()
 for epoch in range(epochs):
 
     for batch in loader:
+
+        if max_steps >= 0 and step >= max_steps:
+            stop_training = True
+            break
 
         images = batch["image"].to(device)
         tokens = batch["tokens"].to(device)
@@ -283,6 +298,10 @@ for epoch in range(epochs):
             )
 
         step += 1
+
+    if stop_training:
+        print(f"Reached max_steps={max_steps}, stopping early.")
+        break
 
 
 # -----------------------------

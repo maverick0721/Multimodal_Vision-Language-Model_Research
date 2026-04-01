@@ -928,6 +928,18 @@ The full pipeline runs training through evaluation and inference in a single com
 ./scripts/run_all.sh
 ```
 
+Quick dry-run mode (caps training steps and skips interactive stages):
+
+```bash
+FAST_DRY_RUN=1 TRAIN_MAX_STEPS=20 ./scripts/run_all.sh
+```
+
+To enable interactive inference/chat stages explicitly:
+
+```bash
+RUN_INTERACTIVE=1 ./scripts/run_all.sh
+```
+
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#2c3e50'}}}%%
 flowchart LR

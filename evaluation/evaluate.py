@@ -56,18 +56,24 @@ def evaluate_vqa(model, dataloader, device):
             # question tokens
             tokens = batch["tokens"].to(device)
 
-            # answers are same tokens shifted
-            answers = batch["tokens"].to(device)
+            # Prefer explicit labels/answers from dataloader.
+            # Fallback to tokens when labels are unavailable.
+            if "labels" in batch:
+                answers = batch["labels"].to(device)
+            elif "answer" in batch:
+                answers = batch["answer"].to(device)
+            else:
+                answers = batch["tokens"].to(device)
 
             logits, _, _, _ = model(images, tokens)
 
             preds = logits.argmax(dim=-1)
 
-            preds = preds[:, 0]
-            answers = answers[:, 0]
-
-            correct += (preds == answers).sum().item()
-            total += answers.size(0)
+            # Evaluate token accuracy only on supervised answer tokens.
+            valid = answers != -100
+            if valid.any():
+                correct += (preds[valid] == answers[valid]).sum().item()
+                total += valid.sum().item()
 
     if total == 0:
         return 0

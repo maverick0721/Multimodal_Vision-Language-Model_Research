@@ -87,20 +87,35 @@ fi
 
 
 echo ""
-echo "STEP 8: Inference test"
+echo "STEP 8: Smoke test"
 echo "-------------------------------------------------"
 
-if [ -f "inference/generate.py" ]; then
-    python -m inference.generate
+if [ -f "scripts/smoke_test.py" ]; then
+    python scripts/smoke_test.py
+else
+    echo "scripts/smoke_test.py not found, skipping smoke test"
 fi
 
 
 echo ""
-echo "STEP 9: Chat interface"
+echo "STEP 9: Inference test"
 echo "-------------------------------------------------"
 
-if [ -f "inference/run_chat.py" ]; then
+if [ "${RUN_INTERACTIVE:-0}" = "1" ] && [ -f "inference/generate.py" ]; then
+    python -m inference.generate
+else
+    echo "Skipping interactive inference (set RUN_INTERACTIVE=1 to enable)"
+fi
+
+
+echo ""
+echo "STEP 10: Chat interface"
+echo "-------------------------------------------------"
+
+if [ "${RUN_INTERACTIVE:-0}" = "1" ] && [ -f "inference/run_chat.py" ]; then
     python -m inference.run_chat
+else
+    echo "Skipping interactive chat (set RUN_INTERACTIVE=1 to enable)"
 fi
 
 

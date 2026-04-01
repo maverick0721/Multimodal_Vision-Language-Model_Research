@@ -110,12 +110,19 @@ Answer:
     # Chat interface
     def chat(self, image, question):
 
-        # -------- generate answer using trained prompt format --------
+        # Build a grounded prompt with retrieval and short conversation history.
+        prompt = self.build_prompt(question)
 
-        answer = self.generator.generate(
-            image_path=image,
-            prompt=question
-        )
+        # If the question appears tool-appropriate, let the ReAct loop use tools.
+        # Otherwise use the standard grounded generation path.
+        tool_name = self.router.detect_tool(question)
+        if tool_name is not None:
+            answer = self.agent.run(image, prompt)
+        else:
+            answer = self.generator.generate(
+                image_path=image,
+                prompt=prompt
+            )
 
         # -------- update memory --------
 

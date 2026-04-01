@@ -13,5 +13,7 @@ for r in runs:
 
         print(r, metrics)
 
-    except:
-        pass
+    except FileNotFoundError:
+        print(f"WARNING: metrics missing for {r}: {metrics_file}")
+    except json.JSONDecodeError as exc:
+        print(f"WARNING: invalid metrics JSON for {r}: {exc}")

@@ -43,7 +43,7 @@ def collate_fn(batch):
 
     images = []
     tokens = []
-    answers = []
+    labels = []
 
     for item in batch:
 
@@ -59,7 +59,7 @@ def collate_fn(batch):
                 img, tok, ans = item
                 images.append(img)
                 tokens.append(tok)
-                answers.append(ans)
+                labels.append(ans)
 
         # dataset returns dict
         elif isinstance(item, dict):
@@ -67,8 +67,10 @@ def collate_fn(batch):
             images.append(item["image"])
             tokens.append(item["tokens"])
 
-            if "answer" in item:
-                answers.append(item["answer"])
+            if "labels" in item:
+                labels.append(item["labels"])
+            elif "answer" in item:
+                labels.append(item["answer"])
 
     images = torch.stack(images)
 
@@ -83,11 +85,11 @@ def collate_fn(batch):
         "tokens": tokens
     }
 
-    if len(answers) > 0:
-        batch_out["answer"] = pad_sequence(
-            answers,
+    if len(labels) > 0:
+        batch_out["labels"] = pad_sequence(
+            labels,
             batch_first=True,
-            padding_value=0
+            padding_value=-100
         )
 
     return batch_out
